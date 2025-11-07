@@ -161,10 +161,11 @@ def solve_sokoban_bfs(initial_state):
 # Initial state (player x,y + flattened map)
 initial_state = (6, 3, tuple(map_template.flatten())) 
 
-solution_path = solve_sokoban_bfs(initial_state)
 
+print("\n--- Running BFS ---")
+solution_path = solve_sokoban_bfs(initial_state)
+print(f"BFS path length: {len(solution_path) if solution_path else 0}")
 print("Solution path (dx, dy):", solution_path)
-print(f"Path length: {len(solution_path) if solution_path else 0}")
 
 # ------------------- Redraw path in environment -------------------
 if solution_path:
