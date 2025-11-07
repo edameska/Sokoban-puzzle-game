@@ -91,15 +91,6 @@ def apply_move(x, y, m, dx, dy, push):
     map_array[ny, nx] = 5
     
     return (nx, ny, tuple(map_array.flatten()))
-def is_deadlock(map_array, template_map):
-    for y in range(1, map_array.shape[0] - 1):
-        for x in range(1, map_array.shape[1] - 1):
-            if map_array[y, x] == 2:  # crate not on goal
-                # Check corners
-                if ((map_array[y-1, x] == 1 or map_array[y+1, x] == 1) and
-                    (map_array[y, x-1] == 1 or map_array[y, x+1] == 1)):
-                    return True
-    return False
 
 
 # ------------------- BFS Implementation --------------------
@@ -130,10 +121,6 @@ def solve_sokoban_bfs(initial_state):
             
         for dx, dy, push in valid_moves((x, y), m):
             new_state = apply_move(x, y, m, dx, dy, push)
-            map_array = np.array(new_state[2]).reshape(map_template.shape)
-
-            if is_deadlock(map_array, map_template):
-                continue  # prune
             
             if new_state not in visited:
                 visited.add(new_state)
