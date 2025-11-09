@@ -1,7 +1,6 @@
 import gymnasium as gym
 import famnit_gym
 import numpy as np
-import queue
 import time
 
 # ------------ Map creation and setup -------------------
