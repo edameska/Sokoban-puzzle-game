@@ -1,199 +1,155 @@
 import gymnasium as gym
 import famnit_gym
 import numpy as np
-import queue, heapq, time
+from collections import deque
+import heapq
+import time
 
-# ------------ Map creation and setup -------------------
-# 0 = Floor, 1 = Wall, 2 = Crate, 3 = Goal, 4 = Crate on Goal, 5 = Player
-
+# ---------------- Map Setup ----------------
 map_template = np.array([
-    [1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 0, 0, 0, 0, 3, 0, 1], 
-    [1, 0, 2, 0, 0, 0, 0, 1], 
-    [1, 0, 0, 0, 0, 0, 5, 1], 
-    [1, 1, 1, 1, 1, 1, 1, 1]
+    [1,1,1,1,1,1,1,1],
+    [1,0,0,0,0,3,0,1],
+    [1,0,2,0,0,0,0,1],
+    [1,0,0,0,0,0,5,1],
+    [1,1,1,1,1,1,1,1]
 ])
 options = {'map_template': map_template, 'scale': 0.75}
 
-# ------------------- Utility Functions --------------------
+# Directions: left, right, up, down (dx, dy)
+dirs = [(-1,0),(1,0),(0,-1),(0,1)]
+move_to_action = {(0,-1):0, (1,0):1, (0,1):2, (-1,0):3}
 
-def get_ground_state(y, x, template):
-    if 0 <= y < template.shape[0] and 0 <= x < template.shape[1]:
-        if template[y, x] == 3:
-            return 3
-    return 0
+# ---------------- Utilities ----------------
+def get_ground_state(y, x, template_map):
+    return 3 if template_map[y, x] == 3 else 0
 
-def is_goal(m):
-    return not np.any(np.array(m) == 2)
+def is_goal(box_pos, goals):
+    return box_pos in goals
 
-def valid_moves(player_pos, m):
-    moves = []
-    x, y = player_pos
-    arr = np.array(m).reshape(map_template.shape)
-    dirs = [(-1, 0), (1, 0), (0, -1), (0, 1)]
-    for dx, dy in dirs:
-        nx, ny = x + dx, y + dy
-        if arr[ny, nx] == 1:
-            continue
-        if arr[ny, nx] in (2, 4):
-            bx, by = nx + dx, ny + dy
-            if arr[by, bx] in (0, 3):
-                moves.append((dx, dy, True))
-        elif arr[ny, nx] in (0, 3):
-            moves.append((dx, dy, False))
-    return moves
-
-def apply_move(x, y, m, dx, dy, push):
-    arr = np.array(m).reshape(map_template.shape).copy()
-    nx, ny = x + dx, y + dy
-    if push:
-        bx, by = nx + dx, ny + dy
-        arr[ny, nx] = get_ground_state(ny, nx, map_template)
-        arr[by, bx] = 2 if arr[by, bx] == 0 else 4
-    arr[y, x] = get_ground_state(y, x, map_template)
-    arr[ny, nx] = 5
-    return (nx, ny, tuple(arr.flatten()))
-
-def is_deadlock(arr, template):
-    for y in range(1, arr.shape[0]-1):
-        for x in range(1, arr.shape[1]-1):
-            if arr[y, x] == 2 and template[y, x] != 3:
-                # corner check
-                if ((arr[y-1, x] == 1 or arr[y+1, x] == 1) and
-                    (arr[y, x-1] == 1 or arr[y, x+1] == 1)):
-                    return True
-
-                # wall line check (optional)
-                if arr[y-1, x] == 1 or arr[y+1, x] == 1:  # horizontal wall
-                    if not any(template[y, i] == 3 for i in range(arr.shape[1])):
-                        return True
-                if arr[y, x-1] == 1 or arr[y, x+1] == 1:  # vertical wall
-                    if not any(template[i, x] == 3 for i in range(arr.shape[0])):
-                        return True
-    return False
-
-
-def heuristic_box_to_goal(map_array, template):
-#   sum of Manhattan distances from each crate to its nearest goal position
-    crates = np.argwhere(map_array == 2)
-    goals = np.argwhere(template == 3)
-    total = 0
-
-    for cy, cx in crates:
-        # Find closest goal for this crate
-        min_dist = min(abs(cy - gy) + abs(cx - gx) for gy, gx in goals)
-        total += min_dist
-
-    return total
-
-def abstracted_actions(map_array, template):
-    # push-only actions abstraction
-    crates = np.argwhere(map_array == 2)
-    actions = []
-    dirs = [(-1,0),(1,0),(0,-1),(0,1)]
-
-    for (y, x) in crates:
-        for dx, dy in dirs:
-            ny, nx = y + dy, x + dx      # where the box would move
-            back_y, back_x = y - dy, x - dx  # where player must stand
-
-            # bounds check
-            if not (0 <= ny < map_array.shape[0] and 0 <= nx < map_array.shape[1]):
-                continue
-            if not (0 <= back_y < map_array.shape[0] and 0 <= back_x < map_array.shape[1]):
-                continue
-
-            # can push only if box destination is free/goal and player can stand behind
-            if map_array[ny, nx] in (0, 3) and map_array[back_y, back_x] in (0, 3, 5):
-
-                # simulate the push
-                new_state = map_array.copy()
-                new_state[y, x] = 0 if template[y, x] != 3 else 3  # restore ground
-                new_state[ny, nx] = 2
-
-                # skip if it causes a deadlock
-                if is_deadlock(new_state, template):
-                    continue
-
-                # valid abstract action
-                actions.append(((y, x), (dx, dy)))
-
-    return actions
-
-
-
-
-
-# ------------------- A* (informed search) --------------------
-
-def solve_sokoban_astar(initial_state):
+# BFS to see if player can reach a target position
+def player_path(arr, start, goal, box_pos):
     visited = set()
-    pq = []
-    transitions = {initial_state: (None, None)}
-    x, y, m = initial_state
-    g = 0
-    h = heuristic_box_to_goal(np.array(m).reshape(map_template.shape), map_template)
-    heapq.heappush(pq, (g + h, g, initial_state)) #sorts so one with lowest f = g + h is popped first
-
-    start = time.time()
-    while pq:
-        f, g, state = heapq.heappop(pq)
-        x, y, m = state
-        if state in visited:
-            continue
-        visited.add(state)
-        if is_goal(m):
-            print(f"A* finished. States explored: {len(visited)}")
-            return reconstruct_path(transitions, state)
-
-        for dx, dy, push in valid_moves((x, y), m):
-            new_state = apply_move(x, y, m, dx, dy, push)
-            if new_state in visited:
-                continue
-            arr = np.array(new_state[2]).reshape(map_template.shape)
-            if is_deadlock(arr, map_template):
-                continue
-            new_g = g + 1
-            h = heuristic_box_to_goal(arr, map_template)
-            heapq.heappush(pq, (new_g + h, new_g, new_state))
-            transitions[new_state] = (state, (dx, dy))
-
-        if time.time() - start > 10:
-            print("A* timeout.")
-            break
-    print("A* failed.")
+    queue = deque([(start, [])])
+    while queue:
+        (y, x), path = queue.popleft()
+        if (y, x) == goal:
+            return path
+        if (y, x) in visited: continue
+        visited.add((y, x))
+        for dx, dy in dirs:
+            nx, ny = x+dx, y+dy
+            if 0 <= ny < arr.shape[0] and 0 <= nx < arr.shape[1]:
+                if arr[ny, nx] in (0,3) and (ny, nx) != box_pos:
+                    queue.append(((ny,nx), path + [(dx, dy)]))
     return None
 
-# ------------------- Helper: Reconstruct Path --------------------
+# Apply a move; push=True if pushing box
+# Apply a move; push=True if pushing box
+def apply_move(player_pos, box_pos, arr, move, push):
+    py, px = player_pos
+    dx, dy = move  # dx = horizontal, dy = vertical
+    nx, ny = px + dx, py + dy
+    new_box_pos = box_pos
+    new_arr = np.array(arr).reshape(map_template.shape).copy()
+    
+    if push:
+        bx, by = box_pos[1], box_pos[0]  # box_pos = (row, col)
+        bx_new, by_new = bx + dx, by + dy
+        # Bounds check
+        if not (0 <= by_new < arr.shape[0] and 0 <= bx_new < arr.shape[1]):
+            return player_pos, box_pos, tuple(arr.flatten())  # invalid move, ignore
+        new_box_pos = (by_new, bx_new)
+        new_arr[by_new, bx_new] = 2
+        new_arr[by, bx] = get_ground_state(by, bx, map_template)
+    
+    # Move player
+    new_arr[ny, nx] = 5
+    new_arr[py, px] = get_ground_state(py, px, map_template)
+    
+    return (ny, nx), new_box_pos, tuple(new_arr.flatten())
 
-def reconstruct_path(transitions, end_state):
-    path = []
-    s = end_state
-    while transitions[s][0] is not None:
-        parent, move = transitions[s]
-        path.append(move)
-        s = parent
-    return path[::-1]
 
-# ------------------- Main Execution --------------------
+# ---------------- Player-aware Box-Centric A* ----------------
+def solve_sokoban_astar(initial_player_pos, initial_box_pos, goals, arr):
+    start_state = (initial_player_pos, initial_box_pos, tuple(arr.flatten()))
+    pq = []
+    heapq.heappush(pq, (0, start_state))
+    visited = set()
+    transitions = {start_state:(None, None)}  # state -> (parent_state, moves)
+    start_time = time.time()
+    
+    while pq:
+        g, state = heapq.heappop(pq)
+        player_pos, box_pos, m = state
+        arr_state = np.array(m).reshape(map_template.shape)
+        
+        if is_goal(box_pos, goals):
+            # reconstruct full path
+            path = []
+            s = state
+            while transitions[s][0] is not None:
+                parent, moves = transitions[s]
+                path = moves + path
+                s = parent
+            return path
+        
+        if state in visited: continue
+        visited.add(state)
 
-initial_state = (6, 3, tuple(map_template.flatten()))
+        for dx, dy in dirs:
+            bx, by = box_pos[1], box_pos[0]
+            target_box_pos = (by+dy, bx+dx)
+            push_pos = (by-dy, bx-dx)
 
+            if not (0 <= target_box_pos[0] < arr.shape[0] and 0 <= target_box_pos[1] < arr.shape[1]): continue
+            if not (0 <= push_pos[0] < arr.shape[0] and 0 <= push_pos[1] < arr.shape[1]): continue
 
-print("\n--- Running A* ---")
-astar_path = solve_sokoban_astar(initial_state)
-print(f"A* path length: {len(astar_path) if astar_path else 0}")
+            if arr_state[target_box_pos[0], target_box_pos[1]] not in (0,3): continue
 
-print("\nExecuting A* solution in environment...")
-env = gym.make('famnit_gym/Sokoban-v1', render_mode='human', options=options)
-env.reset()
-time.sleep(1)
+            p_path = player_path(arr_state, player_pos, push_pos, box_pos)
+            if p_path is None: continue
 
-move_to_action = {(0, -1):0, (1, 0):1, (0, 1):2, (-1, 0):3}
-for dx, dy in astar_path:
-    action = move_to_action[(dx, dy)]
-    _, _, terminated, truncated, _ = env.step(action)
-    time.sleep(0.3)
-    if terminated or truncated:
-        break
-env.close()
+            # Apply player moves
+            new_player_pos = player_pos
+            temp_arr = np.array(arr_state).reshape(map_template.shape)
+            moves = []
+            for move_p in p_path:
+                new_player_pos, _, temp_arr_flat = apply_move(new_player_pos, box_pos, temp_arr, move_p, push=False)
+                temp_arr = np.array(temp_arr_flat).reshape(map_template.shape)
+                moves.append(move_p)
+            
+            # Apply push
+            new_player_pos, new_box_pos, temp_arr_flat = apply_move(new_player_pos, box_pos, temp_arr, (dx, dy), push=True)
+            moves.append((dx, dy))
+            new_state = (new_player_pos, new_box_pos, temp_arr_flat)
+
+            if new_state not in visited:
+                heapq.heappush(pq, (g+len(moves), new_state))
+                transitions[new_state] = (state, moves)
+
+        if time.time()-start_time > 20:
+            print("Timeout")
+            break
+    print("No solution")
+    return None
+
+# ---------------- Main ----------------
+initial_player_pos = tuple(np.argwhere(map_template==5)[0])
+initial_box_pos = tuple(np.argwhere(map_template==2)[0])
+goals = [tuple(g) for g in np.argwhere(map_template==3)]
+full_path = solve_sokoban_astar(initial_player_pos, initial_box_pos, goals, map_template)
+
+print("\n--- Player-aware Sokoban A* ---")
+if full_path:
+    print(f"Full path length: {len(full_path)}")
+    env = gym.make('famnit_gym/Sokoban-v1', render_mode='human', options=options)
+    env.reset()
+    for dx,dy in full_path:
+        action = move_to_action.get((dx,dy))
+        if action is None: continue
+        _,_,terminated,truncated,_ = env.step(action)
+        time.sleep(0.2)
+        if terminated or truncated: break
+    env.close()
+else:
+    print("No solution found")
