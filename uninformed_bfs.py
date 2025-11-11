@@ -2,6 +2,7 @@ import gymnasium as gym
 import famnit_gym
 import numpy as np
 import time
+import queue
 
 # ------------ Map creation and setup -------------------
 # 0 = Floor, 1 = Wall, 2 = Crate, 3 = Goal, 4 = Crate on Goal, 5 = Player
@@ -90,15 +91,24 @@ def apply_move(x, y, m, dx, dy, push):
     map_array[ny, nx] = 5
     
     return (nx, ny, tuple(map_array.flatten()))
-def is_deadlock(map_array, template_map):
-    for y in range(1, map_array.shape[0] - 1):
-        for x in range(1, map_array.shape[1] - 1):
-            if map_array[y, x] == 2:  # crate not on goal
-                # Check corners
-                if ((map_array[y-1, x] == 1 or map_array[y+1, x] == 1) and
-                    (map_array[y, x-1] == 1 or map_array[y, x+1] == 1)):
+def is_deadlock(arr, template):
+    for y in range(1, arr.shape[0]-1):
+        for x in range(1, arr.shape[1]-1):
+            if arr[y, x] == 2 and template[y, x] != 3:
+                # corner check
+                if ((arr[y-1, x] == 1 or arr[y+1, x] == 1) and
+                    (arr[y, x-1] == 1 or arr[y, x+1] == 1)):
                     return True
+
+                # wall line check (optional)
+                if arr[y-1, x] == 1 or arr[y+1, x] == 1:  # horizontal wall
+                    if not any(template[y, i] == 3 for i in range(arr.shape[1])):
+                        return True
+                if arr[y, x-1] == 1 or arr[y, x+1] == 1:  # vertical wall
+                    if not any(template[i, x] == 3 for i in range(arr.shape[0])):
+                        return True
     return False
+
 
 
 # ------------------- BFS Implementation --------------------
