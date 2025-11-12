@@ -6,16 +6,13 @@ import heapq
 import time
 
 # ---------------- Map Setup ----------------
-map_template = np.array([
-    [1,1,1,1,1,1,1,1,1,1,1,1],
-    [1,0,0,0,0,0,0,0,0,0,0,1],
-    [1,0,2,0,0,0,0,0,3,0,0,1],
-    [1,0,0,0,0,0,0,0,0,0,0,1],
-    [1,1,0,1,1,0,0,1,1,0,0,1],
-    [1,3,0,0,0,0,0,0,0,3,0,1],
-    [1,0,2,0,0,0,0,2,0,0,0,1],
-    [1,0,0,0,1,5,1,0,0,0,0,1],
-    [1,1,1,1,1,1,1,1,1,1,1,1]
+map_template =  np.array([
+    [1,1,1,1,1,1,1],
+    [1,5,0,2,0,3,1],
+    [1,0,0,0,0,0,1],
+    [1,0,0,2,0,3,1],
+    [1,0,0,0,0,0,1],
+    [1,1,1,1,1,1,1]
 ])
 options = {'map_template': map_template, 'scale': 0.75}
 
@@ -31,6 +28,7 @@ def is_goal(box_positions, goals):
     return all(pos in goals for pos in box_positions)
 
 def player_path(arr, start, goal, box_positions):
+    # compute path from player to position behind box where we should push
     visited = set()
     queue = deque([(start, [])])
     while queue:
@@ -54,7 +52,7 @@ def apply_move(player_pos, box_positions, arr, move, push_box_idx=None):
     new_box_positions = list(box_positions)
     new_arr = np.array(arr).reshape(map_template.shape).copy()
 
-    if push_box_idx is not None:
+    if push_box_idx is not None: #handle box push if there is one
         bx, by = box_positions[push_box_idx][1], box_positions[push_box_idx][0]
         bx_new, by_new = bx + dx, by + dy
         if not (0 <= by_new < arr.shape[0] and 0 <= bx_new < arr.shape[1]):
@@ -75,6 +73,7 @@ def heuristic(box_positions, goals):
     return sum(min(abs(b[0]-g[0]) + abs(b[1]-g[1]) for g in goals) for b in box_positions)
 
 def solve_sokoban_astar(initial_player_pos, initial_box_positions, goals, arr):
+    # Only considers box-pushing actions instead of all player movements
     start_state = (initial_player_pos, tuple(initial_box_positions), tuple(arr.flatten()))
     pq = []
     heapq.heappush(pq, (heuristic(initial_box_positions, goals), 0, start_state))
@@ -100,6 +99,7 @@ def solve_sokoban_astar(initial_player_pos, initial_box_positions, goals, arr):
             continue
         visited.add(state)
 
+        #look at possible box pushes
         for idx, box in enumerate(box_positions):
             by, bx = box
             for dx, dy in dirs:
@@ -114,11 +114,12 @@ def solve_sokoban_astar(initial_player_pos, initial_box_positions, goals, arr):
                 if arr_state[target_box_pos[0], target_box_pos[1]] not in (0,3):
                     continue
 
+                # check if player can reach the pushing position
                 p_path = player_path(arr_state, player_pos, push_pos, box_positions)
                 if p_path is None:
                     continue
 
-                # Apply player moves
+                #move behind box
                 new_player_pos = player_pos
                 temp_arr = np.array(arr_state)
                 moves = []
@@ -127,7 +128,7 @@ def solve_sokoban_astar(initial_player_pos, initial_box_positions, goals, arr):
                     temp_arr = np.array(temp_arr_flat).reshape(arr.shape)
                     moves.append(move_p)
 
-                # Apply push
+                #push box
                 new_player_pos, new_box_positions, temp_arr_flat = apply_move(new_player_pos, box_positions, temp_arr, (dx, dy), push_box_idx=idx)
                 moves.append((dx, dy))
                 new_state = (new_player_pos, new_box_positions, temp_arr_flat)

@@ -5,7 +5,6 @@ import time
 import queue
 
 # ------------ Map creation and setup -------------------
-# 0 = Floor, 1 = Wall, 2 = Crate, 3 = Goal, 4 = Crate on Goal, 5 = Player
 
 map_template = np.array([
     [1,1,1,1,1,1,1],
@@ -125,7 +124,7 @@ def solve_sokoban_bfs(initial_state):
 
 # ------------------- Main Execution --------------------
 
-# Auto-detect initial player position
+#initial player position
 player_pos = np.argwhere(map_template == 5)[0]
 initial_state = (player_pos[1], player_pos[0], tuple(map_template.flatten()))
 

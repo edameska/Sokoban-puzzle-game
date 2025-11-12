@@ -71,12 +71,12 @@ def get_ground_state(y, x, template_map):
     return 3 if template_map[y, x] == 3 else 0
 
 def is_goal(m):
-    """Check if all crates are on goals (2 should no longer exist)."""
+    # Check if all crates are on goals 
     map_array = np.array(m)
     return not np.any(map_array == 2)
 
 def valid_moves(player_pos, m):
-    """Return all valid moves (dx, dy, push) from current state."""
+    #Return all valid moves (dx, dy, push) from current state
     moves = []
     x, y = player_pos
     map_array = np.array(m).reshape(map_template.shape)
@@ -105,7 +105,7 @@ def valid_moves(player_pos, m):
     return moves
 
 def is_dead_square(y, x, template_map):
-    """Check if a crate pushed to (y,x) is irrecoverably stuck (in a corner not a goal)."""
+    #Check if a crate pushed to (y,x) is in a corner
     if template_map[y, x] == 3:
         return False
     walls = 0
@@ -121,10 +121,9 @@ def apply_move(x, y, m, dx, dy, push):
 
     if push:
         bx, by = nx + dx, ny + dy
-        # Check dead corner
         if is_dead_square(by, bx, map_template):
             return None
-        # Restore previous crate position
+        # Restore prev crate position
         if map_array[ny, nx] == 4:
             map_array[ny, nx] = 3
         else:
@@ -138,25 +137,6 @@ def apply_move(x, y, m, dx, dy, push):
     return (nx, ny, tuple(map_array.flatten()))
 
 # ------------------- DFS with Iterative Deepening --------------------
-
-def dfs_search(state, depth, max_depth, visited, start_time, time_limit):
-    if time.time() - start_time > time_limit:
-        return None
-    x, y, m = state
-    if is_goal(m):
-        return []
-    if depth >= max_depth:
-        return None
-    for dx, dy, push in valid_moves((x, y), m):
-        new_state = apply_move(x, y, m, dx, dy, push)
-        if new_state is None or new_state in visited:
-            continue
-        visited.add(new_state)
-        result = dfs_search(new_state, depth + 1, max_depth, visited, start_time, time_limit)
-        if result is not None:
-            return [(dx, dy)] + result
-    return None
-
 def dfs_search(state, depth, max_depth, visited, start_time, time_limit, states_counter):
     if time.time() - start_time > time_limit:
         return None

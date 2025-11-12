@@ -4,7 +4,6 @@ import numpy as np
 import time
 
 # ------------ Map creation and setup -------------------
-# 0 = Floor, 1 = Wall, 2 = Crate, 3 = Goal, 4 = Crate on Goal, 5 = Player
 
 map_template = np.array([
     [1,1,1,1,1,1,1],
@@ -22,12 +21,12 @@ def get_ground_state(y, x, template_map):
     return 3 if template_map[y, x] == 3 else 0
 
 def is_goal(m):
-    """Check if all crates are on goals (2 should no longer exist)."""
+    # Check if all crates are on goals 
     map_array = np.array(m)
     return not np.any(map_array == 2)
 
 def valid_moves(player_pos, m):
-    """Return all valid moves (dx, dy, push) from current state."""
+    #Return all valid moves (dx, dy, push) from current state
     moves = []
     x, y = player_pos
     map_array = np.array(m).reshape(map_template.shape)
@@ -56,7 +55,7 @@ def valid_moves(player_pos, m):
     return moves
 
 def is_dead_square(y, x, template_map):
-    """Check if a crate pushed to (y,x) is irrecoverably stuck (in a corner not a goal)."""
+    #Check if a crate pushed to (y,x) is in a corner
     if template_map[y, x] == 3:
         return False
     walls = 0
@@ -72,10 +71,9 @@ def apply_move(x, y, m, dx, dy, push):
 
     if push:
         bx, by = nx + dx, ny + dy
-        # Check dead corner
         if is_dead_square(by, bx, map_template):
             return None
-        # Restore previous crate position
+        # Restore prev crate position
         if map_array[ny, nx] == 4:
             map_array[ny, nx] = 3
         else:

@@ -105,7 +105,7 @@ def apply_move(player_pos, boxes, arr, move, push_idx=None):
 
 # ----------------  A* with box abstraction ----------------
 def heuristic(box_positions, goals):
-    # Example: sum of Manhattan distances from boxes to nearest goals
+    # sum of Manhattan distances from boxes to nearest goals
     return sum(min(abs(b[0]-g[0]) + abs(b[1]-g[1]) for g in goals) for b in box_positions)
 
 def solve_sokoban_astar(initial_player_pos, boxes, goals, arr):

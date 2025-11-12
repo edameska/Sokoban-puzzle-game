@@ -6,16 +6,16 @@ import heapq, time
 # ------------------- Utility Functions --------------------
 
 def get_ground_state(y, x, template):
-    """Return underlying ground type (goal or floor)."""
+    # return ground type 
     return 3 if template[y, x] == 3 else 0
 
 def is_goal(m):
-    """Check if all crates are on goals."""
+    # check if all crates are on goals
     arr = np.array(m).reshape(map_template.shape)
     return not np.any(arr == 2)
 
 def find_player(m):
-    """Return (x, y) of player in the map."""
+    #Return (x, y) of player in the map
     arr = np.array(m).reshape(map_template.shape)
     pos = np.argwhere(arr == 5)
     if pos.size == 0:
@@ -24,7 +24,7 @@ def find_player(m):
     return x, y
 
 def valid_moves(player_pos, m):
-    """Return all valid moves (dx, dy, push) from current state."""
+    # return all valid moves (dx, dy, push) from current state
     moves = []
     x, y = player_pos
     arr = np.array(m).reshape(map_template.shape)
@@ -48,7 +48,7 @@ def valid_moves(player_pos, m):
     return moves
 
 def apply_move(x, y, m, dx, dy, push):
-    """Apply move and return new state."""
+    # apply move and return new state
     arr = np.array(m).reshape(map_template.shape).copy()
     nx, ny = x + dx, y + dy
 
@@ -62,7 +62,7 @@ def apply_move(x, y, m, dx, dy, push):
     return (nx, ny, tuple(arr.flatten()))
 
 def is_deadlock(arr, template):
-    """Detect simple deadlocks: crates in corners not on goals."""
+    # detect crates in corners not on goals
     for y in range(1, arr.shape[0]-1):
         for x in range(1, arr.shape[1]-1):
             if arr[y, x] in (2,):
@@ -74,7 +74,7 @@ def is_deadlock(arr, template):
     return False
 
 def heuristic_box_to_goal(arr, template):
-    """Sum of Manhattan distances from each crate to nearest goal."""
+    #sum of Manhattan distances from each crate to nearest goal
     arr = np.array(arr).reshape(template.shape)
     crates = np.argwhere(arr == 2)
     goals = np.argwhere(template == 3)
