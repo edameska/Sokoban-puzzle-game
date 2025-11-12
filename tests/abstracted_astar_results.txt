@@ -1,5 +1,5 @@
-map1: Time=77.82s, Path length=51, States explored=38802
-map2: Time=143.77s, Path length=33, States explored=160162
-map3: Time=8.03s, Path length=37, States explored=9377
-map4: Time=0.00s, Path length=13, States explored=30
-map5: Time=0.06s, Path length=16, States explored=146
+map1: Time=15.05s, Path length=37, States explored=3689
+map2: Time=44.63s, Path length=33, States explored=26869
+map3: Time=4.02s, Path length=37, States explored=3079
+map4: Time=0.00s, Path length=9, States explored=18
+map5: Time=0.04s, Path length=16, States explored=62

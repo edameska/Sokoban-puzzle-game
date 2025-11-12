@@ -103,22 +103,25 @@ def apply_move(player_pos, boxes, arr, move, push_idx=None):
     new_arr[py, px] = get_ground_state(py, px, arr)
     return (ny, nx), tuple(new_boxes), tuple(new_arr.flatten())
 
-# ---------------- Abstracted Box-Centric A* ----------------
+# ----------------  A* with box abstraction ----------------
+def heuristic(box_positions, goals):
+    # Example: sum of Manhattan distances from boxes to nearest goals
+    return sum(min(abs(b[0]-g[0]) + abs(b[1]-g[1]) for g in goals) for b in box_positions)
+
 def solve_sokoban_astar(initial_player_pos, boxes, goals, arr):
     start_state = (initial_player_pos, tuple(boxes), tuple(arr.flatten()))
     pq = []
-    heapq.heappush(pq, (0, start_state))
+    heapq.heappush(pq, (heuristic(boxes, goals), 0, start_state))  # (f=g+h, g, state)
     visited = set()
     transitions = {start_state:(None, None)}
     start_time = time.time()
-    
+
     while pq:
-        g, state = heapq.heappop(pq)
+        f, g, state = heapq.heappop(pq)
         player_pos, box_positions, m = state
         arr_state = np.array(m).reshape(arr.shape)
 
         if is_goal(box_positions, goals):
-            # reconstruct path
             path = []
             s = state
             while transitions[s][0] is not None:
@@ -136,6 +139,7 @@ def solve_sokoban_astar(initial_player_pos, boxes, goals, arr):
                 target_box_pos = (by + dy, bx + dx)
                 push_pos = (by - dy, bx - dx)
 
+                # bounds & obstacles
                 if not (0 <= target_box_pos[0] < arr.shape[0] and 0 <= target_box_pos[1] < arr.shape[1]):
                     continue
                 if not (0 <= push_pos[0] < arr.shape[0] and 0 <= push_pos[1] < arr.shape[1]):
@@ -148,6 +152,7 @@ def solve_sokoban_astar(initial_player_pos, boxes, goals, arr):
                 if p_path is None:
                     continue
 
+                # apply player moves
                 new_player_pos = player_pos
                 temp_arr = np.array(arr_state).reshape(arr.shape)
                 moves = []
@@ -156,18 +161,23 @@ def solve_sokoban_astar(initial_player_pos, boxes, goals, arr):
                     temp_arr = np.array(temp_arr_flat).reshape(arr.shape)
                     moves.append(move_p)
 
+                # apply push
                 new_player_pos, new_box_positions, temp_arr_flat = apply_move(new_player_pos, box_positions, temp_arr, (dx, dy), push_idx=idx)
                 moves.append((dx, dy))
                 new_state = (new_player_pos, new_box_positions, temp_arr_flat)
 
                 if new_state not in visited:
-                    heapq.heappush(pq, (g+len(moves), new_state))
+                    g_new = g + len(moves)
+                    f_new = g_new + heuristic(new_box_positions, goals)
+                    heapq.heappush(pq, (f_new, g_new, new_state))
                     transitions[new_state] = (state, moves)
 
         if time.time()-start_time > 300:
             print("Timeout")
             break
+
     return None, time.time()-start_time, len(visited)
+
 
 # ---------------- Main Execution ----------------
 with open("abstracted_astar_results.txt", "w") as f:
@@ -175,11 +185,11 @@ with open("abstracted_astar_results.txt", "w") as f:
         map_template = m
         options['map_template'] = map_template
         initial_player_pos = tuple(np.argwhere(map_template==5)[0])
-        initial_box_pos = [tuple(g) for g in np.argwhere(map_template==2)]
+        initial_box_positions = [tuple(b) for b in np.argwhere(map_template==2)]
         goals = [tuple(g) for g in np.argwhere(map_template==3)]
 
-        print(f"\n--- Abstracted A* on {map_names[i]} ---")
-        full_path, elapsed, states_explored = solve_sokoban_astar(initial_player_pos, initial_box_pos, goals, map_template)
+        print(f"\n--- Multi-box A* on {map_names[i]} ---")
+        full_path, elapsed, states_explored = solve_sokoban_astar(initial_player_pos, initial_box_positions, goals, map_template)
 
         path_len = len(full_path) if full_path else 0
         f.write(f"{map_names[i]}: Time={elapsed:.2f}s, Path length={path_len}, States explored={states_explored}\n")
